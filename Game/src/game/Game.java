@@ -13,9 +13,9 @@ import javax.swing.*;
 
 public class Game extends JPanel implements ActionListener, KeyListener {
 
-    public static final int SCREEN_WIDTH = 800;
-    public static final int SCREEN_HEIGHT = 600;
-    private static final int PLAYER_WIDTH = 50;
+    public static final int SCREEN_WIDTH = 1280;
+    public static final int SCREEN_HEIGHT = 900;
+    private static final int PLAYER_WIDTH = 30;
     private static final int PLAYER_HEIGHT = 50;
     private static final int MONSTER_WIDTH = 50;
     private static final int MONSTER_HEIGHT = 50;
@@ -37,6 +37,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private int monsterHealth;
     private ArrayList<Image> playerHealthImages;
     private Image playerHealthImage;
+    private Image background;
 
     private boolean upPressed;
     private boolean downPressed;
@@ -54,6 +55,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private Timer monsterAttackTimer;  // 몬스터 공격 타이머
     private int projectileCount;
     private int stage;
+    private boolean p_direction; // 플레이어 왼쪽보면 true, 오른쪽보면 false
 
     public Game() {
         setPreferredSize(new Dimension(SCREEN_WIDTH, SCREEN_HEIGHT));
@@ -89,9 +91,11 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         mImage = "images/M.png";
 
         playerHealthImages = new ArrayList<>();
+
         String imagePath = "images/player_hp.png";
         try {
             playerHealthImage = ImageIO.read(new File("images/player_0hp.png"));
+            background = ImageIO.read(new File("images/B.png"));
         } catch (IOException e) {
         }
         for (int i = 0; i <10; i++) { //하트 10개 생성
@@ -114,8 +118,10 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         if(isMonsterAlive) {
             if (stage == 1) {
                 attack1();
-            }else {
+            }else if(stage==2){
                 attack2(e);
+            } else{
+                attack3(e);
             }
         }
 
@@ -169,8 +175,8 @@ public class Game extends JPanel implements ActionListener, KeyListener {
                 //System.out.println("작동");
                 keyCard = false;
                 //JOptionPane.showMessageDialog(null, "스테이지 2");
-                int answer = JOptionPane.showConfirmDialog(this, "다음 스테이지로 이동하시겠습니까?", "confirm", JOptionPane.YES_NO_OPTION);
-                if (answer == 1) {
+                int response = JOptionPane.showConfirmDialog(this, "다음 스테이지로 이동하시겠습니까?", "confirm", JOptionPane.YES_NO_OPTION);
+                if (response == 1) {
                     System.exit(0);
                 } else {
                     stage++;
@@ -203,12 +209,18 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-
+        g.drawImage(background, 0, 0, null);
         g.setColor(Color.WHITE);
         g.drawString("플레이어 체력: " + playerHealth, 10, 20);
         g.drawString("몬스터 체력: " + monsterHealth, SCREEN_WIDTH - 150, 20);
-
-        player.draw(g, "images/P.png");
+        String PlayerD;
+        if (p_direction) {
+            PlayerD = "images/PL.png";
+        } else {
+            PlayerD = "images/PR.png";
+        }
+        //player.draw(g, "images/P.png");
+        player.draw(g, PlayerD);
         if (isMonsterAlive) {
             monster.draw(g, mImage);
         }
@@ -223,7 +235,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
             item.draw(g, "images/player_hp.png"); // 아이템 이미지 경로를 적절히 수정해야 합니다.
         }
         if (monsterHealth == 0 && keyCard == true) {
-            key.draw(g, "images/K.png");
+            key.draw(g, "images/K2.png");
         }
 
 
@@ -271,9 +283,11 @@ public class Game extends JPanel implements ActionListener, KeyListener {
             downPressed = true;
         }
         if (keyCode == KeyEvent.VK_LEFT) {
+            p_direction = true;
             leftPressed = true;
         }
         if (keyCode == KeyEvent.VK_RIGHT) {
+            p_direction = false;
             rightPressed = true;
         }
         if (keyCode == KeyEvent.VK_SPACE) {
@@ -337,7 +351,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         monster.y = 10;
 
         playerHealth = 10000;
-        monsterHealth = 300;
+        //monsterHealth = 1000;
 
         playerProjectiles.clear();
         monsterProjectiles.clear();
@@ -407,6 +421,70 @@ public class Game extends JPanel implements ActionListener, KeyListener {
                 projectileCount += 36;  // 발사체 수 증가
             } else {
                 projectileCount = 0;
+            }
+        }
+    }
+    public void attack3(ActionEvent e) {
+        if (e.getSource() == monsterAttackTimer) {
+            if (projectileCount < 500) {
+                int projectileX = (int) (monster.getX() + monster.getWidth() / 2 - PROJECTILE_WIDTH / 2);
+                int projectileY = (int) (monster.getY() + monster.getHeight() / 2 - PROJECTILE_HEIGHT / 2);
+
+                if (projectileCount % 5 == 0) {
+                    // 원형으로 배치
+                    for (int i = 0; i < 36; i++) {
+                        double angle = i * (360.0 / 36);
+                        double radians = Math.toRadians(angle);
+                        double dx = Math.cos(radians) * MONSTER_PROJECTILE_SPEED;
+                        double dy = Math.sin(radians) * MONSTER_PROJECTILE_SPEED;
+
+                        Projectile projectile = new Projectile(projectileX, projectileY, dx, dy);
+                        monsterProjectiles.add(projectile);
+                    }
+                } else if (projectileCount % 5 == 1) {
+                    // 직선으로 배치
+                    for (int i = 0; i < 10; i++) {
+                        double dx = 0;
+                        double dy = MONSTER_PROJECTILE_SPEED * (i + 1);
+
+                        Projectile projectile = new Projectile(projectileX, projectileY, dx, dy);
+                        monsterProjectiles.add(projectile);
+                    }
+                } else if (projectileCount % 5 == 2) {
+                    // 대각선으로 배치
+                    double diagonalRadians = Math.toRadians(45);
+                    double diagonalDx = Math.cos(diagonalRadians) * MONSTER_PROJECTILE_SPEED;
+                    double diagonalDy = Math.sin(diagonalRadians) * MONSTER_PROJECTILE_SPEED;
+
+                    for (int i = 0; i < 10; i++) {
+                        Projectile projectile = new Projectile(projectileX, projectileY, diagonalDx * (i + 1), diagonalDy * (i + 1));
+                        monsterProjectiles.add(projectile);
+                    }
+                } else if (projectileCount % 5 == 3) {
+                    // 부채꼴 모양으로 배치
+                    for (int i = 0; i < 20; i++) {
+                        double angle = i * (360.0 / 20);
+                        double radians = Math.toRadians(angle);
+                        double dx = Math.cos(radians) * MONSTER_PROJECTILE_SPEED;
+                        double dy = Math.sin(radians) * MONSTER_PROJECTILE_SPEED;
+
+                        Projectile projectile = new Projectile(projectileX, projectileY, dx, dy);
+                        monsterProjectiles.add(projectile);
+                    }
+                } else {
+                    // 날개 모양으로 배치
+                    for (int i = 0; i < 40; i++) {
+                        double angle = i * (360.0 / 40);
+                        double radians = Math.toRadians(angle);
+                        double dx = Math.cos(radians) * MONSTER_PROJECTILE_SPEED;
+                        double dy = Math.sin(radians) * MONSTER_PROJECTILE_SPEED;
+
+                        Projectile projectile = new Projectile(projectileX, projectileY, dx, dy);
+                        monsterProjectiles.add(projectile);
+                    }
+                }
+
+                projectileCount++;
             }
         }
     }
