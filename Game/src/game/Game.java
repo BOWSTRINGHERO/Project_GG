@@ -17,8 +17,8 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     public static final int SCREEN_HEIGHT = 900;
     private static final int PLAYER_WIDTH = 30;
     private static final int PLAYER_HEIGHT = 50;
-    private static final int MONSTER_WIDTH = 50;
-    private static final int MONSTER_HEIGHT = 50;
+    private static final int MONSTER_WIDTH = 80;
+    private static final int MONSTER_HEIGHT = 100;
     public static final int PROJECTILE_WIDTH = 10;
     public static final int PROJECTILE_HEIGHT = 10;
     private static final int PLAYER_PROJECTILE_SPEED = 5;
@@ -38,7 +38,6 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private ArrayList<Image> playerHealthImages;
     private Image playerHealthImage;
     private Image background;
-
     private boolean upPressed;
     private boolean downPressed;
     private boolean leftPressed;
@@ -51,7 +50,6 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private boolean isMonsterAlive;
     private boolean keyCard;
     private String mImage;
-
     private Timer monsterAttackTimer;  // 몬스터 공격 타이머
     private int projectileCount;
     private int stage;
@@ -69,7 +67,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
 
         playerHealth = 10000;
         monsterHealth = 300;
-        stage=1;
+        stage = 1;
 
         player = new Player(SCREEN_WIDTH / 2 - PLAYER_WIDTH / 2, SCREEN_HEIGHT - PLAYER_HEIGHT - 10, PLAYER_WIDTH, PLAYER_HEIGHT);
         monster = new Monster(SCREEN_WIDTH / 2 - MONSTER_WIDTH / 2, 10, MONSTER_WIDTH, MONSTER_HEIGHT);
@@ -95,7 +93,8 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         String imagePath = "images/player_hp.png";
         try {
             playerHealthImage = ImageIO.read(new File("images/player_0hp.png"));
-            background = ImageIO.read(new File("images/B.png"));
+            //background = ImageIO.read(new File("images/B.png"));
+            background = ImageIO.read(new File("images/B_temp.png"));
         } catch (IOException e) {
         }
         for (int i = 0; i <10; i++) { //하트 10개 생성
@@ -118,8 +117,6 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         if(isMonsterAlive) {
             if (stage == 1) {
                 attack1();
-            }else if(stage==2){
-                attack2(e);
             } else{
                 attack3(e);
             }
@@ -168,18 +165,17 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         }
         ///만약 몬스터의 체력이 0이면 키가 나온다
         if (monsterHealth == 0) {
-
             isMonsterAlive = false;
             keyCard = true;
             if(player.getBounds().intersects(key.getBounds())){
                 //System.out.println("작동");
                 keyCard = false;
                 //JOptionPane.showMessageDialog(null, "스테이지 2");
-                int response = JOptionPane.showConfirmDialog(this, "다음 스테이지로 이동하시겠습니까?", "confirm", JOptionPane.YES_NO_OPTION);
+                int response = JOptionPane.showConfirmDialog(this, "선생님이 등장합니다!", "confirm", JOptionPane.YES_NO_OPTION);
                 if (response == 1) {
                     System.exit(0);
                 } else {
-                    stage++;
+                    stage = 2;
                     resetGame();
                 }
                 //System.exit(0);
@@ -351,11 +347,11 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         monster.y = 10;
 
         playerHealth = 10000;
-        //monsterHealth = 1000;
+        monsterHealth = 1000;
 
         playerProjectiles.clear();
         monsterProjectiles.clear();
-        //mImage = "images/T.png";
+        mImage = "images/Teacher.png";
 
         isMonsterAlive = true;
         keyCard = false;
