@@ -2,19 +2,25 @@ package game;
 
 import java.awt.*;
 import java.awt.event.*;
-import java.io.File;
-import java.io.IOException;
+import java.awt.image.BufferedImage;
+import java.io.*;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.Scanner;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 
 
 
 
-public class Game extends JPanel implements ActionListener, KeyListener {
+public class Game5 extends JPanel implements ActionListener, KeyListener {
+
+    private long startTime;
+    private long endTime;
 
     public static final int SCREEN_WIDTH = 1024;
-    public static final int SCREEN_HEIGHT = 800;
+    public static final int SCREEN_HEIGHT = 900;
     private static final int PLAYER_WIDTH = 30;
     private static final int PLAYER_HEIGHT = 50;
 
@@ -22,7 +28,13 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     public static final int PROJECTILE_HEIGHT = 10;
     private static final int PLAYER_PROJECTILE_SPEED = 5;
     private static final int MONSTER_PROJECTILE_SPEED = 3;
-    public static final int MONSTER_PROJECTILE_COOLDOWN = 100;
+
+    private static final int DB_ROTATION_COUNT = 8;
+    private static final int DB_RADIUS = 200;
+    private static final double DB_ROTATION_SPEED = 0.005;
+    private double dbRotationAngle;  // DB 이미지 회전 각도
+    private BufferedImage dbImage;
+    private long lastDBDamageTime;  // 마지막 DB 데미지 적용 시간
 
     private Item item;
     private Timer itemTimer;
@@ -45,9 +57,18 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private int lastPressedDirection;
 
 
+
+    private boolean isCollisionDisabled = false;
+    private Timer collisionDisableTimer;
+
     private Item key;
+    private Item glass;
     private boolean isMonsterAlive;
+    private boolean isTeacherAlive;
     private boolean keyCard;
+    private boolean isWearGlass;
+    private boolean temp;
+
     private String mImage;
     private Timer monsterAttackTimer;  // 몬스터 공격 타이머
     private int projectileCount;
@@ -57,7 +78,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private int MONSTER_WIDTH = 100;
     private int MONSTER_HEIGHT = 100;
 
-    public Game() {
+    public Game5() {
         setPreferredSize(new Dimension(SCREEN_WIDTH, SCREEN_HEIGHT));
         setBackground(Color.BLACK);
         setFocusable(true);
@@ -67,9 +88,12 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         monsterAttackTimer.start();
         projectileCount = 0;
 
-        playerHealth = 10000;
+        playerHealth = 100;
         monsterHealth = 300;
         stage = 0;
+
+        dbRotationAngle = 0;
+        lastDBDamageTime = 0;
 
         player = new Player(SCREEN_WIDTH / 2 - PLAYER_WIDTH / 2, SCREEN_HEIGHT - PLAYER_HEIGHT - 10, PLAYER_WIDTH, PLAYER_HEIGHT);
         monster = new Monster(SCREEN_WIDTH / 2 - MONSTER_WIDTH / 2, 10, MONSTER_WIDTH, MONSTER_HEIGHT);
@@ -78,6 +102,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         timer = new Timer(10, this);
         timer.start();
 
+        item = new Item(SCREEN_WIDTH / 2 - 25, SCREEN_HEIGHT / 2 - 25, 50, 50);  // 아이템 인스턴스 생성
         itemTimer = new Timer(5000, this); // 5초마다 타이머 이벤트 발생
         itemTimer.setInitialDelay(0); // 초기 딜레이를 5초로 설정하여 처음 아이템 생성
         itemTimer.start();
@@ -85,8 +110,12 @@ public class Game extends JPanel implements ActionListener, KeyListener {
 
         isMonsterAlive = true;
         keyCard = false;
+        isTeacherAlive = false;
+        isWearGlass = false;
+        temp = false;
 
         key = new Item(800, 100, 40, 40);
+        glass = new Item(800, 600, 40, 40);
 
         mImage = "images/Monster.png";
 
@@ -95,9 +124,13 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         String imagePath = "images/player_hp.png";
         try {
             playerHealthImage = ImageIO.read(new File("images/player_0hp.png"));
-            //background = ImageIO.read(new File("images/B.png"));
             background = ImageIO.read(new File("images/Background_window.png"));
+            BufferedImage originalDBImage = ImageIO.read(new File("images/DB.png"));
+            int dbImageWidth = 50;  // 원하는 이미지 가로 크기
+            int dbImageHeight = 50;  // 원하는 이미지 세로 크기
+            dbImage = resizeImage(originalDBImage, dbImageWidth, dbImageHeight);
         } catch (IOException e) {
+            e.printStackTrace();
         }
         for (int i = 0; i <10; i++) { //하트 10개 생성
             try {
@@ -107,24 +140,66 @@ public class Game extends JPanel implements ActionListener, KeyListener {
                 e.printStackTrace();
             }
         }
+
+        collisionDisableTimer = new Timer(2000, e -> {
+            isCollisionDisabled = false;
+            collisionDisableTimer.stop();
+        });
+        collisionDisableTimer.setRepeats(false);
+
+        startTime = System.currentTimeMillis();
+
+
+
     }
 
+    public ArrayList<String> loadPlayTimeFromFile() {
+        ArrayList<String> playTimes = new ArrayList<>();
+
+        try (Scanner scanner = new Scanner(new File("playtime.txt"))) {
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                if (line.startsWith("플레이 시간 : ")) {
+                    playTimes.add(line);
+                }
+            }
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return playTimes;
+    }
+
+    private BufferedImage resizeImage(BufferedImage originalImage, int newWidth, int newHeight) {
+        BufferedImage resizedImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = resizedImage.createGraphics();
+        g.drawImage(originalImage, 0, 0, newWidth, newHeight, null);
+        g.dispose();
+        return resizedImage;
+    }
 
     @Override
 
     public void actionPerformed(ActionEvent e) {
+
+        if (monsterHealth <= 0 || playerHealth <= 0) {
+            endTime = System.currentTimeMillis();
+            long playTime = endTime - startTime;
+            savePlayTimeToFile(playTime);
+        }
+
         player.move(upPressed, downPressed, leftPressed, rightPressed);
         monster.chasePlayer(player);
 
-        if(isMonsterAlive) {
-            if (stage == 0) {
-                attack1();
-            } else if(stage==1){
+        if(isMonsterAlive && !isTeacherAlive) {
+            attack1();
+        }
+        if (isMonsterAlive && isTeacherAlive) {
+            if (stage == 1) {
                 attack2(e);
             } else if (stage == 2) {
                 attack3(e);
-            } else {
-
+            } else{
+                attack4(e);
             }
         }
 
@@ -140,6 +215,13 @@ public class Game extends JPanel implements ActionListener, KeyListener {
                 i--;
                 if(monsterHealth > 0)
                     monsterHealth -= 50;
+                if(isTeacherAlive) {
+                    if (monsterHealth <= 0) {
+                        // 몬스터 격파, 게임 오버 로직 처리
+                        JOptionPane.showMessageDialog(null, "승리하였습니다!");
+                        System.exit(0);
+                    }
+                }
             }
         }
 
@@ -154,10 +236,22 @@ public class Game extends JPanel implements ActionListener, KeyListener {
                 monsterProjectiles.remove(i);
                 i--;
                 playerHealth -= 10;
-                if (playerHealth <= 0) {
+                if(!temp) {
+                    if (playerHealth <= 9900) {
+                        isWearGlass = true;
+                        if (player.getBounds().intersects(glass.getBounds())) {
+                            //System.out.println("작동");
+                            isWearGlass = false;
+                            playerHealth = 100;
+                            temp = true;
+                        }
+
+                    }
+                }
+                if (playerHealth == 0) {
                     // 플레이어 격파, 게임 오버 로직 처리
                     JOptionPane.showMessageDialog(null, "패배하였습니다!");
-
+                    System.exit(0);
                 }
 
             }
@@ -165,20 +259,46 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         }
         if (e.getSource() == itemTimer) {
             if (!isItemActive) {
-                item = new Item(SCREEN_WIDTH / 2-25, SCREEN_HEIGHT / 2- 25 , 15, 15);
+                int itemX = (int) (Math.random() * (SCREEN_WIDTH - item.getWidth()));
+                int itemY = (int) (Math.random() * (SCREEN_HEIGHT - item.getHeight()));
+                if (itemX < 0) {
+                    itemX = 0;
+                }
+                if (itemY < 0) {
+                    itemY = 0;
+                }
+                if (itemX + item.getWidth() > SCREEN_WIDTH) {
+                    itemX = (int) (SCREEN_WIDTH - item.getWidth());
+                }
+                if (itemY + item.getHeight() > SCREEN_HEIGHT) {
+                    itemY = (int) (SCREEN_HEIGHT - item.getHeight());
+                }
+
+                item = new Item(itemX, itemY, 15, 15);
                 isItemActive = true;
+//                item = new Item(SCREEN_WIDTH / 2-25, SCREEN_HEIGHT / 2- 25 , 15, 15);
+//                isItemActive = true;
             }
         }
         ///만약 몬스터의 체력이 0이면 키가 나온다
-        if (monsterHealth == 0) {
-            isMonsterAlive = false;
-            keyCard = true;
-            if(player.getBounds().intersects(key.getBounds())){
-                //System.out.println("작동");
-                keyCard = false;
-                JOptionPane.showMessageDialog(null, "선생님이 등장합니다!");
-                stage++;
-                resetGame();
+        if (!isTeacherAlive) {
+            if (monsterHealth == 0) {
+                isMonsterAlive = false;
+                keyCard = true;
+                if (player.getBounds().intersects(key.getBounds())) {
+                    //System.out.println("작동");
+                    keyCard = false;
+                    JOptionPane.showMessageDialog(null, "선생님이 등장합니다!");
+                    stage = 1;
+                    resetGame();
+                }
+            }
+        } else{
+            if (monsterHealth <= 700 && monsterHealth > 300) {
+                stage = 2;
+            } else if (monsterHealth <= 300) {
+                stage = 3;
+                mImage = "images/Teacher_2.png";
             }
         }
 
@@ -186,18 +306,40 @@ public class Game extends JPanel implements ActionListener, KeyListener {
             checkItemCollision();
         }
 
-        if (!isItemActive && itemTimer.getDelay() == 0) {
-            int itemX = (int) (Math.random() * (SCREEN_WIDTH - item.getWidth()));
-            int itemY = (int) (Math.random() * (SCREEN_HEIGHT - item.getHeight()));
+        if (stage == 3) {
 
-            item = new Item(itemX, itemY, 15, 15);
-            isItemActive = true;
+            if (isItemActive && !isCollisionDisabled) {
+                double dbCenterX = monster.getX() + monster.getWidth() / 2;
+                double dbCenterY = monster.getY() + monster.getHeight() / 2;
 
-            itemTimer.setDelay(5000);
-            itemTimer.setInitialDelay(5000);
+                double playerCenterX = player.getX() + player.getWidth() / 2;
+                double playerCenterY = player.getY() + player.getHeight() / 2;
+
+                double distance = Math.sqrt(Math.pow(dbCenterX - playerCenterX, 2) + Math.pow(dbCenterY - playerCenterY, 2));
+
+                if (distance < (DB_RADIUS + player.getWidth() / 2)) {
+                    // 충돌 시 플레이어의 체력 감소
+                    playerHealth -= 10;
+                    isCollisionDisabled = true;
+                    collisionDisableTimer.start();
+                }
+                if (playerHealth <= 0) {
+                    // 플레이어 격파, 게임 오버 로직 처리
+                    JOptionPane.showMessageDialog(null, "패배하였습니다!");
+
+                }
+
+                checkItemCollision();
+
+            }
         }
 
+        dbRotationAngle += DB_ROTATION_SPEED;
+        if (dbRotationAngle >= 2 * Math.PI) {
+            dbRotationAngle = 0;
 
+        }
+        System.currentTimeMillis();
 
         repaint();
     }
@@ -214,6 +356,14 @@ public class Game extends JPanel implements ActionListener, KeyListener {
             PlayerD = "images/Player_L.png";
         } else {
             PlayerD = "images/Player_R.png";
+        }
+
+        if (temp) {
+            if (p_direction) {
+                PlayerD = "images/Player_Glasses_L.gif";
+            } else {
+                PlayerD = "images/Player_Glasses_R.gif";
+            }
         }
         //player.draw(g, "images/P.png");
         player.draw(g, PlayerD);
@@ -232,6 +382,9 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         }
         if (monsterHealth == 0 && keyCard == true) {
             key.draw(g, "images/Key.png");
+        }
+        if (isWearGlass == true) {
+            glass.draw(g,"images/Glasses.gif");
         }
 
 
@@ -252,6 +405,19 @@ public class Game extends JPanel implements ActionListener, KeyListener {
 
         for (Projectile projectile : monsterProjectiles) {
             projectile.draw(g, "images/DB.png");
+        }
+
+        if(stage==3) {
+            double centerX = monster.getX() + monster.getWidth() / 2;
+            double centerY = monster.getY() + monster.getHeight() / 2;
+            double radius = DB_RADIUS;
+
+            for (int i = 0; i < DB_ROTATION_COUNT; i++) {
+                double angle = i * (2 * Math.PI / DB_ROTATION_COUNT) + dbRotationAngle;
+                int dbX = (int) (centerX + radius * Math.cos(angle) - dbImage.getWidth() / 2);
+                int dbY = (int) (centerY + radius * Math.sin(angle) - dbImage.getHeight() / 2);
+                g.drawImage(dbImage, dbX, dbY, null);
+            }
         }
     }
     private void checkItemCollision() {
@@ -347,7 +513,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         monster.y = 10;
 
 
-        playerHealth = 10000;
+        playerHealth = 100;
         monsterHealth = 1000;
 
         playerProjectiles.clear();
@@ -357,6 +523,7 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         isMonsterAlive = true;
         keyCard = false;
         isItemActive = false;
+        isTeacherAlive = true;
         itemTimer.setDelay(0);
 
         itemTimer.restart();
@@ -483,6 +650,47 @@ public class Game extends JPanel implements ActionListener, KeyListener {
 
                 projectileCount++;
             }
+        }
+    }
+    public void attack4(ActionEvent e) {
+        if (e.getSource() == monsterAttackTimer) {
+            if (projectileCount < 15) {  // 발사체 수가 36개 미만일 때에만 발사
+                double angle = projectileCount * (360.0 / 36);  // 원형으로 발사체를 배치하기 위한 각도 계산
+                double radians = Math.toRadians(angle);  // 각도를 라디안으로 변환
+                double dx = Math.cos(radians) * MONSTER_PROJECTILE_SPEED;  // X축 이동량 계산
+                double dy = Math.sin(radians) * MONSTER_PROJECTILE_SPEED;  // Y축 이동량 계산
+
+                int projectileX = (int) (monster.getX() + monster.getWidth() / 2 - PROJECTILE_WIDTH / 2);
+                int projectileY = (int) (monster.getY() + monster.getHeight() / 2 - PROJECTILE_HEIGHT / 2);
+
+                for (int i = 0; i < 15; i++) {
+                    Projectile projectile = new Projectile(projectileX, projectileY, dx, dy);
+                    monsterProjectiles.add(projectile);
+
+                    angle += 24; // 10도씩 증가하여 다음 발사체의 각도 계산
+                    radians = Math.toRadians(angle);
+                    dx = Math.cos(radians) * MONSTER_PROJECTILE_SPEED;
+                    dy = Math.sin(radians) * MONSTER_PROJECTILE_SPEED;
+                }
+
+                projectileCount += 36;  // 발사체 수 증가
+            } else {
+                projectileCount = 0; // 0으로 초기화 안하면 한번 쏘고 땡
+            }
+        }
+    }
+
+    private void savePlayTimeToFile(long playTime) {
+        String filename = "playtime.txt";
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String formattedTime = dateFormat.format(new Date());
+
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filename, true))) {
+            writer.println("플레이 시간 : " + playTime + "ms");
+            writer.println("종료 시간 : " + formattedTime);
+            writer.println("--------------------------------");
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }
